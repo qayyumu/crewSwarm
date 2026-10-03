@@ -8,6 +8,10 @@ agent's full transcript.
 Chat with it like ChatGPT: ask it to predict anything, watch the colony
 forage live, and keep asking follow-ups on the same trail.
 
+![Main UI — chat with the swarm while agents forage](main_UI.png)
+
+![Research results — oracle prediction with confidence and key signals](research_results.png)
+
 ## The swarm
 
 | Agent    | Role                                                                 |
