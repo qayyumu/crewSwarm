@@ -29,6 +29,25 @@ _last_question: dict[str, str] = {}
 class PredictRequest(BaseModel):
     question: str
     session_id: Optional[str] = None
+    mode: str = "auto"  # auto | heuristic | llm
+
+
+def _resolve_mode(requested: str) -> tuple[Optional[bool], Optional[str]]:
+    """Map the UI's mode choice onto run_swarm's use_llm flag.
+
+    Returns (use_llm, notice): use_llm None = auto-detect; notice is set
+    when a requested mode had to fall back.
+    """
+    from .llm_adapter import crewai_status
+
+    if requested == "heuristic":
+        return False, None
+    if requested == "llm":
+        status = crewai_status()
+        if status["available"]:
+            return True, None
+        return False, f"LLM mode unavailable ({status['reason']}) — fell back to the heuristic engine."
+    return None, None
 
 
 @app.get("/")
@@ -38,9 +57,9 @@ def index():
 
 @app.get("/api/health")
 def health():
-    from .llm_adapter import crewai_available
+    from .llm_adapter import crewai_status
 
-    return {"ok": True, "crewai_mode": crewai_available()}
+    return {"ok": True, "crewai": crewai_status()}
 
 
 @app.post("/api/predict")
@@ -51,9 +70,13 @@ def predict(req: PredictRequest):
     sid, board = store.get(req.session_id)
     prior = _last_question.get(sid, "")
     _last_question[sid] = req.question.strip()
+    use_llm, notice = _resolve_mode(req.mode)
     events = []
+    if notice:
+        events.append({"type": "notice", "message": notice})
     async def _collect():
-        async for ev in run_swarm(req.question.strip(), board, prior_question=prior):
+        async for ev in run_swarm(req.question.strip(), board,
+                                  use_llm=use_llm, prior_question=prior):
             events.append(ev)
 
     asyncio.run(_collect())
@@ -61,14 +84,18 @@ def predict(req: PredictRequest):
 
 
 @app.get("/api/predict/stream")
-def predict_stream(q: str = Query(..., min_length=3), session_id: Optional[str] = None):
+def predict_stream(q: str = Query(..., min_length=3), session_id: Optional[str] = None,
+                   mode: str = Query("auto", pattern="^(auto|heuristic|llm)$")):
     sid, board = store.get(session_id)
+    use_llm, notice = _resolve_mode(mode)
 
     async def gen():
         prior = _last_question.get(sid, "")
         _last_question[sid] = q.strip()
         yield f"event: session\ndata: {json.dumps({'session_id': sid})}\n\n"
-        async for ev in run_swarm(q.strip(), board, prior_question=prior):
+        if notice:
+            yield f"data: {json.dumps({'type': 'notice', 'message': notice})}\n\n"
+        async for ev in run_swarm(q.strip(), board, use_llm=use_llm, prior_question=prior):
             yield f"data: {json.dumps(ev)}\n\n"
         yield "event: end\ndata: {}\n\n"
 

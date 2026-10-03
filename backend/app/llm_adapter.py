@@ -20,19 +20,31 @@ from typing import AsyncIterator, Optional
 from .pheromones import PheromoneBoard
 from . import tools
 
+# crewai reads this for the default model; old versions may ignore it,
+# in which case crewai's own default applies.
+os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-4o-mini")
+
 
 def crewai_available() -> bool:
+    return crewai_status()["available"]
+
+
+def crewai_status() -> dict:
+    """Why LLM mode is or isn't usable right now (for the UI selector)."""
     if not os.environ.get("OPENAI_API_KEY"):
-        return False
+        return {"available": False, "reason": "no OPENAI_API_KEY set"}
     try:
         import crewai  # noqa: F401
 
-        return True
+        return {"available": True, "reason": "crewai + OPENAI_API_KEY ready"}
     except Exception:
-        return False
+        return {"available": False, "reason": "crewai not installed"}
 
 
 def _make_tools(board: PheromoneBoard, role: str):
+    from crewai.tools import tool
+
+    @tool("sniff_trail")
     def sniff_trail(k: int = 5) -> str:
         """Smell the pheromone trail: returns the few info bits your role can perceive."""
         bits = board.sniff(role, k=int(k))
@@ -44,6 +56,7 @@ def _make_tools(board: PheromoneBoard, role: str):
             for b in bits
         )
 
+    @tool("deposit_bit")
     def deposit_bit(content: str, url: str = "", tags: str = "", strength: float = 1.0) -> str:
         """Lay down a pheromone bit for other agents to find. Keep it under 120 words."""
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
@@ -51,6 +64,7 @@ def _make_tools(board: PheromoneBoard, role: str):
                             tags=tag_list, strength=float(strength))
         return f"deposited bit {bit.id}"
 
+    @tool("search")
     def search(query: str) -> str:
         """Search the web. Returns titles, urls and snippets."""
         rs = tools.search_web(query, max_results=5)
@@ -58,14 +72,13 @@ def _make_tools(board: PheromoneBoard, role: str):
             return "(no results)"
         return "\n".join(f"- {r.title} | {r.url} | {r.snippet[:200]}" for r in rs)
 
+    @tool("fetch")
     def fetch(url: str) -> str:
         """Fetch and extract readable text from a page."""
         text = tools.scrape_url(url)
         return text[:4000] or "(could not extract text)"
 
-    return [
-        sniff_trail, deposit_bit, search, fetch,
-    ]
+    return [sniff_trail, deposit_bit, search, fetch]
 
 
 AGENT_DEFS = {
@@ -168,7 +181,8 @@ async def run_llm_swarm(
             f"User's question: {question}\n\nPheromone board:\n{trail}\n\n"
             "Write a JSON report with keys: summary (string), confidence "
             "(integer 0-100), signals (array of {text, url}), risks (array of "
-            "{text, url}), followups (array of strings, exactly 2). "
+            "{text, url}), followups (array of exactly 2 strings, each a "
+            "follow-up question the user could ask next, phrased as questions). "
             "Output ONLY JSON."
         ),
         expected_output="A JSON object only.",

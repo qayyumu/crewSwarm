@@ -50,6 +50,11 @@ CrewAI agents (classic Agent/Task/Crew API, `backend/app/llm_adapter.py`) —
 each agent still only perceives the board through the `sniff_trail` tool.
 If the LLM fails at any step, the colony falls back gracefully.
 
+The UI has an engine selector (top right): **auto** picks LLM when
+available and heuristic otherwise, or you can force either one. Forcing LLM
+without a key streams a notice and falls back to the heuristic engine for
+that run only.
+
 ## Layout
 
 ```
@@ -65,10 +70,10 @@ frontend/
 
 ## API
 
-- `GET  /api/predict/stream?q=...&session_id=...` — SSE event stream
-- `POST /api/predict` `{question, session_id?}` — one-shot JSON
+- `GET  /api/predict/stream?q=...&session_id=...&mode=auto|heuristic|llm` — SSE event stream
+- `POST /api/predict` `{question, session_id?, mode?}` — one-shot JSON
 - `GET  /api/board/{session_id}` — inspect the pheromone board
-- `GET  /api/health` — engine mode (heuristic vs crewai)
+- `GET  /api/health` — crewai availability + reason
 
 A `session_id` is a pheromone board: follow-up questions keep foraging on
 the same evaporating trail.

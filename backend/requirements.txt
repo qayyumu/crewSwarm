@@ -2,7 +2,8 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 requests>=2.31
 beautifulsoup4>=4.12
-ddgs>=2025.0  # keyless web search backend
+python-dotenv>=1.0
+ddgs>=9.16  # keyless web search backend
 
 # optional: enables LLM-driven agents (requires OPENAI_API_KEY)
 # crewai>=0.11
