@@ -199,16 +199,21 @@ async def run_swarm(
     board: PheromoneBoard,
     rounds: int = 2,
     use_llm: Optional[bool] = None,
+    provider: str = "auto",
     prior_question: str = "",
 ) -> AsyncIterator[Event]:
     """Drive the colony round by round, yielding UI events."""
+    from .llm_adapter import default_provider
+
     if use_llm is None:
         use_llm = crewai_available()
 
     board.evaporate()  # start a fresh round on this board
 
     if use_llm:
-        async for ev in run_llm_swarm(question, board, rounds=rounds):
+        if provider in ("", "auto"):
+            provider = default_provider() or "openai"
+        async for ev in run_llm_swarm(question, board, rounds=rounds, provider=provider):
             yield ev
         return
 

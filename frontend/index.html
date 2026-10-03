@@ -107,7 +107,8 @@
   <select id="mode" title="Agent engine">
     <option value="auto">auto engine</option>
     <option value="heuristic">heuristic engine</option>
-    <option value="llm">crewai · LLM</option>
+    <option value="openai">crewai · OpenAI</option>
+    <option value="gemini">crewai · Gemini</option>
   </select>
 </header>
 
@@ -137,13 +138,20 @@ let sessionId = null;
 let busy = false;
 
 fetch('/api/health').then(r=>r.json()).then(h=>{
-  const opt = modeSel.querySelector('option[value="llm"]');
-  if (!h.crewai.available) {
-    opt.textContent = `crewai · LLM (unavailable: ${h.crewai.reason})`;
-  } else {
-    opt.textContent = 'crewai · LLM';
-    modeSel.value = 'llm';
+  const p = h.crewai.providers || {};
+  const label = {openai:'crewai · OpenAI', gemini:'crewai · Gemini'};
+  for (const prov of ['openai','gemini']){
+    const opt = modeSel.querySelector(`option[value="${prov}"]`);
+    if (p[prov]) {
+      opt.textContent = label[prov];
+    } else {
+      opt.textContent = `${label[prov]} (no key)`;
+    }
   }
+  // default to the best available engine
+  if (p.openai) modeSel.value = 'openai';
+  else if (p.gemini) modeSel.value = 'gemini';
+  else modeSel.value = 'auto';
 });
 
 function scroll(){ document.getElementById('chat').scrollTop = 1e9; }

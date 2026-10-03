@@ -40,20 +40,24 @@ scraping with rule-based analysis.
 ### Optional: LLM-driven agents via CrewAI
 
 ```bash
-.venv/bin/pip install crewai
-export OPENAI_API_KEY=sk-...
+.venv/bin/pip install "crewai[google-genai]"   # the google-genai extra enables Gemini
+# then put one or both in .env:
+#   OPENAI_API_KEY=sk-...
+#   GEMINI_API_KEY=...        (or GOOGLE_API_KEY)
 ./run.sh
 ```
 
-With a key set and crewai importable, the same pheromone loop is driven by
+With crewai installed and a provider key set, the same pheromone loop is driven by
 CrewAI agents (classic Agent/Task/Crew API, `backend/app/llm_adapter.py`) —
 each agent still only perceives the board through the `sniff_trail` tool.
-If the LLM fails at any step, the colony falls back gracefully.
+Models default to `gpt-4o-mini` and `gemini/gemini-2.5-flash`; override with
+`OPENAI_MODEL` / `GEMINI_MODEL`. If the LLM fails at any step, the colony
+falls back gracefully.
 
-The UI has an engine selector (top right): **auto** picks LLM when
-available and heuristic otherwise, or you can force either one. Forcing LLM
-without a key streams a notice and falls back to the heuristic engine for
-that run only.
+The UI engine selector (top right) lists each provider separately: **auto**
+picks OpenAI → Gemini → heuristic in that order, or force any of them.
+Forcing a provider without its key streams a notice and falls back to the
+heuristic engine for that run only.
 
 ## Layout
 

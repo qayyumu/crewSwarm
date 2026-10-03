@@ -5,5 +5,6 @@ beautifulsoup4>=4.12
 python-dotenv>=1.0
 ddgs>=9.16  # keyless web search backend
 
-# optional: enables LLM-driven agents (requires OPENAI_API_KEY)
-# crewai>=0.11
+# optional: enables LLM-driven agents. Install one of:
+#   crewai            (OpenAI: OPENAI_API_KEY in .env)
+#   crewai[google-genai]  (adds Gemini: GEMINI_API_KEY or GOOGLE_API_KEY in .env)

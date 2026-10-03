@@ -20,9 +20,22 @@ from typing import AsyncIterator, Optional
 from .pheromones import PheromoneBoard
 from . import tools
 
-# crewai reads this for the default model; old versions may ignore it,
-# in which case crewai's own default applies.
-os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-4o-mini")
+
+def providers() -> dict[str, bool]:
+    """Which LLM providers have keys available."""
+    return {
+        "openai": bool(os.environ.get("OPENAI_API_KEY")),
+        "gemini": bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")),
+    }
+
+
+def default_provider() -> str:
+    p = providers()
+    if p["openai"]:
+        return "openai"
+    if p["gemini"]:
+        return "gemini"
+    return ""
 
 
 def crewai_available() -> bool:
@@ -30,15 +43,34 @@ def crewai_available() -> bool:
 
 
 def crewai_status() -> dict:
-    """Why LLM mode is or isn't usable right now (for the UI selector)."""
-    if not os.environ.get("OPENAI_API_KEY"):
-        return {"available": False, "reason": "no OPENAI_API_KEY set"}
+    """Which providers are usable right now (for the UI selector)."""
     try:
         import crewai  # noqa: F401
 
-        return {"available": True, "reason": "crewai + OPENAI_API_KEY ready"}
+        crewai_ok = True
     except Exception:
-        return {"available": False, "reason": "crewai not installed"}
+        crewai_ok = False
+    p = providers()
+    available = crewai_ok and any(p.values())
+    if not crewai_ok:
+        reason = "crewai not installed"
+    elif not available:
+        reason = "no provider key set (OPENAI_API_KEY / GEMINI_API_KEY)"
+    else:
+        reason = "ready: " + ", ".join(k for k, v in p.items() if v)
+    return {"available": available, "providers": p, "reason": reason}
+
+
+def _make_llm(provider: str):
+    """Build a crewai LLM for the chosen provider."""
+    from crewai import LLM
+
+    if provider == "gemini":
+        key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        model = os.environ.get("GEMINI_MODEL", "gemini/gemini-2.5-flash")
+        return LLM(model=model, api_key=key)
+    os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-4o-mini")
+    return LLM(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"))
 
 
 def _make_tools(board: PheromoneBoard, role: str):
@@ -110,11 +142,14 @@ async def run_llm_swarm(
     question: str,
     board: PheromoneBoard,
     rounds: int = 2,
+    provider: str = "openai",
 ) -> AsyncIterator[dict]:
     from crewai import Agent, Crew, Process, Task
 
+    llm = _make_llm(provider)
+
     yield {"type": "start", "question": question, "rounds": rounds,
-           "mode": "crewai", "terms": tools.key_terms(question)}
+           "mode": f"crewai-{provider}", "terms": tools.key_terms(question)}
 
     def run_agent(role: str, task_desc: str) -> str:
         agent = Agent(
@@ -122,6 +157,7 @@ async def run_llm_swarm(
             goal=AGENT_DEFS[role]["goal"],
             backstory=AGENT_DEFS[role]["backstory"],
             tools=_make_tools(board, role),
+            llm=llm,
             verbose=False,
             allow_delegation=False,
             max_iter=6,
@@ -172,6 +208,7 @@ async def run_llm_swarm(
         backstory="You are the colony's brain. You see every trail the foragers laid. "
                   "You synthesize, weigh the skeptic's marks, and commit to a prediction "
                   "with an honest confidence level.",
+        llm=llm,
         verbose=False,
         allow_delegation=False,
         max_iter=4,
