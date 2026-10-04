@@ -143,6 +143,7 @@ async def run_llm_swarm(
     board: PheromoneBoard,
     rounds: int = 2,
     provider: str = "openai",
+    simulate: bool = False,
 ) -> AsyncIterator[dict]:
     from crewai import Agent, Crew, Process, Task
 
@@ -246,4 +247,9 @@ async def run_llm_swarm(
     ][:10]
     report["board_stats"] = board.stats()
     yield {"type": "report", "report": report}
+    if simulate:
+        from .engine import _merge_simulation
+
+        async for ev in _merge_simulation(question, report, use_llm=True, provider=provider):
+            yield ev
     yield {"type": "done", "board_stats": board.stats()}

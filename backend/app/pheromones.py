@@ -49,6 +49,7 @@ ROLE_SCENTS = {
     "scraper": {"content", "quote", "data", "source"},
     "analyst": {"signal", "trend", "fact", "content"},
     "skeptic": {"signal", "claim", "risk"},
+    "persona": {"reaction", "sentiment", "claim", "signal", "risk"},
     "oracle": set(),  # oracle reads everything at the end
 }
 

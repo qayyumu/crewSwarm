@@ -96,7 +96,24 @@
   }
   #mode:disabled { opacity: .5; cursor: default; }
   .notice { color: var(--accent); font-size: 12.5px; margin: 4px 0; }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; display: flex; gap: 16px; align-items: center; }
+  .opt { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .opt input { accent-color: var(--accent); }
+
+  .reactions-block { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 4px; }
+  .persona-chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--border);
+    border-radius: 14px; padding: 3px 10px; font-size: 12px; margin: 0 6px 6px 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.support { background: var(--good); }
+  .dot.resist { background: var(--bad); }
+  .dot.reframe { background: var(--accent); }
+  .rx { font-size: 13px; margin: 4px 0 4px 2px; }
+  .rx .by { color: var(--muted); font-size: 12px; }
+  .risk-badge { display: inline-block; border-radius: 10px; padding: 1px 9px; font-size: 12px;
+    border: 1px solid var(--border); }
+  .risk-badge.high { color: var(--bad); border-color: var(--bad); }
+  .risk-badge.moderate { color: var(--accent); border-color: var(--accent); }
+  .risk-badge.low { color: var(--good); border-color: var(--good); }
   .typing { color: var(--muted); font-style: italic; }
 </style>
 </head>
@@ -126,7 +143,10 @@ evidence and risks.
     <textarea id="q" rows="1" placeholder="Predict anything… e.g. Will Nvidia still be the largest chip maker by market cap at the end of 2026?"></textarea>
     <button id="send">Send</button>
   </div>
-  <div class="hint">Follow-up questions keep building on the same pheromone trail — like ChatGPT, but the memory evaporates.</div>
+  <div class="hint">
+    <label class="opt"><input type="checkbox" id="simulate" checked> simulate audience reactions</label>
+    <span>follow-ups keep building on the same pheromone trail</span>
+  </div>
 </div></div>
 
 <script>
@@ -134,6 +154,7 @@ const msgs = document.getElementById('msgs');
 const q = document.getElementById('q');
 const sendBtn = document.getElementById('send');
 const modeSel = document.getElementById('mode');
+const simChk = document.getElementById('simulate');
 let sessionId = null;
 let busy = false;
 
@@ -211,7 +232,40 @@ function renderReport(rep, bubble){
     t.innerHTML=`<summary>pheromone board: ${rep.board_stats.bits} bits · round ${rep.board_stats.round}</summary>`;
     bubble.appendChild(t);
   }
+  if (rep.reactions){
+    upsertReactions(rep.reactions, bubble);
+  }
   scroll();
+}
+
+function upsertReactions(rx, bubble){
+  const report = bubble.querySelector('.report');
+  if (!report) return;
+  let block = report.querySelector('.reactions-block');
+  const id = 'rx-' + Math.random().toString(36).slice(2,8);
+  let h = `<div class="reactions-block" id="${id}">`;
+  h += `<div class="lbl">Simulated audience · ${rx.board_stats?.bits ?? ''} reactions</div>`;
+  if (rx.personas?.length){
+    h += `<div>`;
+    for (const p of rx.personas)
+      h += `<span class="persona-chip"><span class="dot ${esc(p.stance)}"></span>${esc(p.name)}</span>`;
+    h += `</div>`;
+  }
+  h += `<p>${esc(rx.trajectory||'')}</p>`;
+  h += `<div class="lbl">Amplification risk: <span class="risk-badge ${esc(rx.amplification_risk||'low')}">${esc(rx.amplification_risk||'low')}</span></div>`;
+  const col = (title, items, cls) => {
+    if (!items?.length) return '';
+    let s = `<div class="lbl">${title}</div>`;
+    for (const it of items)
+      s += `<div class="rx"><span class="dot ${cls}"></span> ${esc(it.text)} <span class="by">— ${esc(it.by||'')}</span></div>`;
+    return s;
+  };
+  h += col('Support', rx.support, 'support');
+  h += col('Resistance', rx.resist, 'resist');
+  h += col('Reframes', rx.reframe, 'reframe');
+  h += `</div>`;
+  if (block) block.outerHTML = h;
+  else report.insertAdjacentHTML('beforeend', h);
 }
 
 async function submit(){
@@ -227,6 +281,7 @@ async function submit(){
 
   const url = '/api/predict/stream?q=' + encodeURIComponent(text)
     + '&mode=' + encodeURIComponent(modeSel.value)
+    + '&simulate=' + (simChk.checked ? '1' : '0')
     + (sessionId ? '&session_id='+encodeURIComponent(sessionId) : '');
 
   try {
@@ -271,6 +326,23 @@ async function submit(){
           } else if (ev.type === 'report'){
             sawReport = true;
             renderReport(ev.report, bubble);
+          } else if (ev.type === 'report_update'){
+            if (ev.report?.reactions) upsertReactions(ev.report.reactions, bubble);
+          } else if (ev.type === 'sim_start'){
+            const cast = (ev.personas||[]).map(p=>esc(p.name)).join(', ');
+            swarm.insertAdjacentHTML('beforeend',
+              `<div class="r">— simulating audience reactions: ${cast} —</div>`);
+          } else if (ev.type === 'sim_round'){
+            swarm.insertAdjacentHTML('beforeend',
+              `<div class="r">— reaction round ${ev.round} —</div>`);
+          } else if (ev.type === 'persona_start'){
+            swarm.insertAdjacentHTML('beforeend',
+              `<div class="a">🎭 <b>${esc(ev.name)}</b> <span class="dot ${esc(ev.stance)}"></span> reacts…</div>`);
+          } else if (ev.type === 'reaction'){
+            const b = ev.bit;
+            swarm.insertAdjacentHTML('beforeend',
+              `<div class="bit"><span class="dot ${esc(ev.stance||'')}"></span> ${esc(b.content.slice(0,140))}</div>`);
+            scroll();
           } else if (ev.type === 'agent_error'){
             swarm.insertAdjacentHTML('beforeend',
               `<div class="a" style="color:#f85149">${ev.role}: ${esc(ev.error)}</div>`);

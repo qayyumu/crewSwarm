@@ -30,6 +30,7 @@ class PredictRequest(BaseModel):
     question: str
     session_id: Optional[str] = None
     mode: str = "auto"  # auto | heuristic | openai | gemini
+    simulate: bool = True
 
 
 def _resolve_mode(requested: str) -> tuple[Optional[bool], str, Optional[str]]:
@@ -80,7 +81,8 @@ def predict(req: PredictRequest):
         events.append({"type": "notice", "message": notice})
     async def _collect():
         async for ev in run_swarm(req.question.strip(), board, use_llm=use_llm,
-                                  provider=provider, prior_question=prior):
+                                  provider=provider, prior_question=prior,
+                                  simulate=req.simulate):
             events.append(ev)
 
     asyncio.run(_collect())
@@ -89,7 +91,8 @@ def predict(req: PredictRequest):
 
 @app.get("/api/predict/stream")
 def predict_stream(q: str = Query(..., min_length=3), session_id: Optional[str] = None,
-                   mode: str = Query("auto", pattern="^(auto|heuristic|openai|gemini)$")):
+                   mode: str = Query("auto", pattern="^(auto|heuristic|openai|gemini)$"),
+                   simulate: bool = Query(True)):
     sid, board = store.get(session_id)
     use_llm, provider, notice = _resolve_mode(mode)
 
@@ -100,7 +103,8 @@ def predict_stream(q: str = Query(..., min_length=3), session_id: Optional[str] 
         if notice:
             yield f"data: {json.dumps({'type': 'notice', 'message': notice})}\n\n"
         async for ev in run_swarm(q.strip(), board, use_llm=use_llm,
-                                  provider=provider, prior_question=prior):
+                                  provider=provider, prior_question=prior,
+                                  simulate=simulate):
             yield f"data: {json.dumps(ev)}\n\n"
         yield "event: end\ndata: {}\n\n"
 

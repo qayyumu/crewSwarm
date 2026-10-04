@@ -201,6 +201,7 @@ async def run_swarm(
     use_llm: Optional[bool] = None,
     provider: str = "auto",
     prior_question: str = "",
+    simulate: bool = False,
 ) -> AsyncIterator[Event]:
     """Drive the colony round by round, yielding UI events."""
     from .llm_adapter import default_provider
@@ -213,7 +214,8 @@ async def run_swarm(
     if use_llm:
         if provider in ("", "auto"):
             provider = default_provider() or "openai"
-        async for ev in run_llm_swarm(question, board, rounds=rounds, provider=provider):
+        async for ev in run_llm_swarm(question, board, rounds=rounds,
+                                      provider=provider, simulate=simulate):
             yield ev
         return
 
@@ -237,5 +239,22 @@ async def run_swarm(
 
     yield {"type": "agent_start", "role": "oracle"}
     await asyncio.sleep(0.05)
-    yield {"type": "report", "report": swarm.oracle()}
+    report = swarm.oracle()
+    yield {"type": "report", "report": report}
+    if simulate:
+        async for ev in _merge_simulation(question, report, use_llm=False, provider=""):
+            yield ev
     yield {"type": "done", "board_stats": board.stats()}
+
+
+async def _merge_simulation(question: str, report: dict, use_llm: bool,
+                            provider: str) -> AsyncIterator[Event]:
+    """Run the persona colony and emit a report_update carrying its verdict."""
+    from .simulation import run_simulation
+
+    async for ev in run_simulation(question, report, use_llm=use_llm, provider=provider):
+        if ev["type"] == "sim_done":
+            merged = {**report, "reactions": ev["reactions"]}
+            yield {"type": "report_update", "report": merged}
+        else:
+            yield ev
