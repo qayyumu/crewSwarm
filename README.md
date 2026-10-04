@@ -22,6 +22,16 @@ forage live, and keep asking follow-ups on the same trail.
 | skeptic  | marks risky / contradicted trails                                    |
 | oracle   | reads the whole board once, commits to a prediction with confidence  |
 
+After the prediction, an optional **persona colony** (`backend/app/simulation.py`)
+reacts to the forecast: five personas (cast per-question by the LLM, or templated
+archetypes in heuristic mode — investor, regulator, analyst, competitor,
+advocate) post reactions on a fresh board seeded with the prediction itself.
+Same rules: each persona only smells a small window of the trail, aligned
+reactions reinforce into coalitions, everything evaporates between rounds.
+The second oracle pass forecasts the narrative: who supports, who resists,
+who reframes, the likely trajectory, and the amplification risk of a backlash
+cascade. Toggle it with the "simulate audience reactions" checkbox.
+
 **Sparse information sharing.** Each forager can only *sniff* the top few
 pheromones its role is tuned for (`backend/app/pheromones.py` → `ROLE_SCENTS`),
 ranked by strength. **Evaporation.** Every round all pheromones decay and
@@ -65,7 +75,8 @@ heuristic engine for that run only.
 backend/app/
   pheromones.py   the shared trail: deposit / sniff / evaporate
   tools.py        keyless search (ddgs + DDG HTML fallback) and scraping
-  engine.py       the swarm loop + heuristic oracle
+  engine.py       the swarm loop + heuristic oracle + simulation merge
+  simulation.py   persona reaction colony (heuristic + LLM casting)
   llm_adapter.py  CrewAI mode (optional)
   main.py         FastAPI, SSE streaming
 frontend/
@@ -74,7 +85,7 @@ frontend/
 
 ## API
 
-- `GET  /api/predict/stream?q=...&session_id=...&mode=auto|heuristic|llm` — SSE event stream
+- `GET  /api/predict/stream?q=...&session_id=...&mode=auto|heuristic|openai|gemini&simulate=1` — SSE event stream
 - `POST /api/predict` `{question, session_id?, mode?}` — one-shot JSON
 - `GET  /api/board/{session_id}` — inspect the pheromone board
 - `GET  /api/health` — crewai availability + reason
